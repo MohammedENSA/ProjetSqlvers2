@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion de Document et utilisateur{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <!-- Section Documents -->
+    <div class="admin-section">
+        <h1 class="section-title">Gestion des Documents</h1>     <!--titre mktob flowl d la page semina lclass admin-section-->
+        
+
+
+<!-- Formulaire de recherche -->
+
+
+<div class="search-form">
+    <form method="GET" action="{{ url_for('gestionadmin') }}">
+        <select name="search_type" required>
+            <option value="id_fonds">ID Fonds</option>
+            <option value="titre">Titre</option>
+            <option value="annee_publication">Année de publication</option>
+            <option value="editeur">Éditeur</option>
+            <option value="reference_unique">Référence unique</option>
+            <option value="nombre_exemplaires">Nombre d'exemplaires</option>
+            <option value="date_creation">Date de création</option>
+            <option value="date_modification">Date de modification</option>
+            <option value="type_document">Type de document</option>
+        </select>
+
+        <div id="type_document_search" style="display: none;">
+            <select name="type_document_query">
+                <option value="livre">Livre</option>
+                <option value="periodique">Périodique</option>
+            </select>
+        </div>
+
+        <input type="text" name="search_query" placeholder="Terme de recherche...">
+        <button type="submit">Rechercher</button>
+    </form>
+</div>
+<script>
+    document.querySelector('select[name="search_type"]').addEventListener('change', function() {
+        const typeDocumentSearch = document.getElementById('type_document_search');
+        const searchQueryInput = document.querySelector('input[name="search_query"]');
+        
+        if (this.value === 'type_document') {
+            typeDocumentSearch.style.display = 'block';
+            searchQueryInput.style.display = 'none';
+        } else {
+            typeDocumentSearch.style.display = 'none';
+            searchQueryInput.style.display = 'block';
+        }
+    });
+    document.addEventListener('DOMContentLoaded', updateSearchVisibility);
+
+    // Exécuter à chaque changement
+    document.querySelector('select[name="search_type"]').addEventListener('change', updateSearchVisibility);
+</script>
+
+        <!-- Tableau des documents -->
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Titre</th>
+                        <th>Année</th>
+                        <th>Éditeur</th>
+                        <th>Type</th>
+                        <th>nombre d'exemplaire</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documents %}
+                    <tr>
+                        <td>{{ doc.id_document }}</td>
+                        <td>{{ doc.titre }}</td>
+                        <td>{{ doc.annee_publication }}</td>
+                        <td>{{ doc.editeur }}</td>
+                        <td>{{ doc.type_document }}</td>
+                        <td>{{ doc.nombre_exemplaires }}</td>  <!--on aura besoin d'ISBN et ISSN dans l'ajout de livre -->
+                        <td class="actions-cell">
+                            <button onclick="openEditDocModal('{{ doc.id_document }}', '{{ doc.titre }}', '{{ doc.annee_publication }}', '{{ doc.editeur }}', '{{ doc.type_document }}', '{{ doc.nbrexemplaire }}', '{{ doc.idfond }}', '{{ doc.referenceunique }}')" class="btn-edit">
+                                Modifier
+                            </button>
+                            <form action="{{ url_for('gestionadmin') }}" method="POST" class="inline-form">
+                                <input type="hidden" name="action" value="delete_document">
+                                <input type="hidden" name="id_document" value="{{ doc.id_document }}">
+                                <button type="submit" class="btn-delete" 
+                                        onclick="return confirm('Confirmer la suppression ?')">
+                                    Supprimer
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+
+
+
+        <!-- Modifier  Document -->
+
+
+
+        <div id="modal-edit-doc" class="modal">
+            <div class="modal-dialog">
+                <h4 class="modal-title">Modifier le Document</h4>
+                <form action="{{ url_for('gestionadmin') }}" method="POST" class="inline-form">
+                    <input type="hidden" name="action" value="edit_document">
+                    <input type="hidden" name="id_document" id="edit_doc_id">
+                    
+                    <label>Titre</label>
+                    <input type="text" name="titre" id="edit_titre" required class="form-input">
+                    
+                    <label>Année</label>
+                    <input type="number" name="annee_publication" id="edit_annee" required class="form-input">
+                    
+                    <label>Éditeur</label>
+                    <input type="text" name="editeur" id="edit_editeur" required class="form-input">
+                    
+                    <label>Type de document</label>
+                    <select name="type_document" id="edit_type" required class="form-input">
+                        <option value="">Sélectionnez un type</option>
+                        <option value="livre">Livre</option>
+                        <option value="periodique">Periodique</option>
+                    </select>
+                    
+                    <label>Nombre d'exemplaires</label>
+                    <input type="number" name="nbrexemplaire" id="edit_nbrexemplaire" required class="form-input" min="1">
+                    
+                    <label>ID du Fond</label>
+                    <input type="text" name="idfond" id="edit_idfond" required class="form-input">
+                    
+                    <label>Référence unique</label>
+                    <input type="text" name="referenceunique" id="edit_reference" required class="form-input">
+                    
+                    <div class="button-group">
+                        <button type="submit" name="action" value="edit_document" class="btn-add">Modifier</button>
+                        <a href="#" class="btn-cancel" onclick="closeEditDocModal()">Fermer</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <script>
+        function openEditDocModal(id, titre, annee, editeur, type, nbr, fond, ref) {
+            document.getElementById('edit_doc_id').value = id;
+            document.getElementById('edit_titre').value = titre;
+            document.getElementById('edit_annee').value = annee;
+            document.getElementById('edit_editeur').value = editeur;
+            document.getElementById('edit_type').value = type;
+            document.getElementById('edit_nbrexemplaire').value = nbr;
+            document.getElementById('edit_idfond').value = fond;
+            document.getElementById('edit_reference').value = ref;
+            
+            window.location.hash = 'modal-edit-doc';
+        }
+        
+        function closeEditDocModal() {
+            window.location.hash = '';
+        }
+        </script>
+
+        <!-- Bouton d'ajouter un document pour ouvrir la modale -->
+
+
+<a href="#modal" class="btn-open-modal">Ajouter un Document</a>
+
+        <!-- Modale cachée par défaut -->
+<div id="modal" class="modal">
+    <div class="modal-dialog">
+        <h4 class="modal-title">Ajouter un Document</h4>
+        <form action="{{ url_for('gestionadmin') }}"method="POST" class="inline-form" >
+            <label>le titre de document</label>
+            <input type="text" name="titredoc" required class="form-input">
+            <label>annee_publication</label>
+            <input type="number" name="annerpub" required class="form-input">
+            <label>editeur</label>
+            <input type="text" name="editeur" required class="form-input">
+            <label>type_document</label>
+            <select name="type_document" required class="form-input">
+                <option value="">Sélectionnez un type</option>    
+                <option value="livre">Livre</option>
+                <option value="periodique">periodique</option>
+            </select>
+            <label>le nombre d'exemplaire</label>
+            <input type="number" name="nbrexemplaire" required class="form-input" min="1">
+            <label>l'Id de Fond</label>
+            <input type="text" name="idfond" required class="form-input">
+            <label>la référence unique</label>
+            <input type="text" name="referenceunique" required class="form-input">
+        <div class="button-group">
+                        <!--<form action="{{ url_for('gestionadmin') }}" method="POST" class="inline-form">
+                <input type="hidden" name="action" value="delete_document">-->
+                <button type="hidden" name="action" value="add_document">Ajouter un document</button>
+            
+            <a href="{{ url_for('gestionadmin') }}" class="btn-cancel">Fermer</a>
+        </div>
+        </form>
+        
+    </div>
+</div>
+
+
+    <!-- Section Utilisateurs -->
+
+
+    <div class="admin-section">
+        <h1 class="section-title">Gestion des Utilisateurs</h1>
+        
+        <!-- Barre de recherche utilisateurs -->
+         
+        <!-- choisir l'option de recherche que voulez l'Admin -->
+
+        <div class="search-container">
+            <form class="search-form" method="GET">  <!--method="GET" : Cela signifie que les données du formulaire seront envoyées via l'URL, ce qui est approprié pour les requêtes de recherche.
+                class="search-form" : Une classe CSS pour le stylisme.-->
+                <select name="search_type" required class="search-select">
+                    <option value="">Choisir critère de recherche</option>
+                    <option value="nom">Nom</option>
+                    <option value="prenom">Prénom</option>
+                    <option value="email">Email</option>
+                    <option value="categorie">Catégorie</option>
+                </select>
+                
+                <div id="search_input_container">
+                    <input type="text" name="search_query" class="search-input"  
+                           placeholder="Rechercher..." >   <!--on va chercher par nom, prenom, email, catégorie-->
+                    
+                    <select name="categorie_query" class="search-input" style="display: none;"required>
+                        <option value="abonne">abonné</option>
+                        <option value="occasionnel">occasionnel</option>
+                        <option value="abonné privilégié">abonné privilégié</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="search-btn">Rechercher</button>
+            </form>
+        </div>
+        
+        <script>     
+        document.querySelector('select[name="search_type"]').addEventListener('change', function() {  
+            const textInput = document.querySelector('input[name="search_query"]');
+            const categorieSelect = document.querySelector('select[name="categorie_query"]');
+            
+            if (this.value === 'categorie') {
+                textInput.style.display = 'none';
+                categorieSelect.style.display = 'block';
+            } else {
+                textInput.style.display = 'block';
+                categorieSelect.style.display = 'none';
+            }
+        });
+        </script>
+
+        
+        <!-- Tableau des utilisateurs -->
+
+
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nom</th>
+                        <th>Prénom</th>
+                        <th>Email</th>
+                        <th>Catégorie</th>
+                        <th>limite_emprunts</th>
+                        <th>duree_emprunt_max</th>
+                        <th>Mot_de_passe_user</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.id_utilisateur }}</td>
+                        <td>{{ user.nom_utilisateur }}</td>
+                        <td>{{ user.prenom_utilisateur }}</td>
+                        <td>{{ user.email_utilisateur }}</td>
+                        <td>
+                            <span class="badge badge-{{ user.categorie }}">
+                                {{ user.categorie }}
+                            </span>
+                        </td>
+                        <td>{{ user.limite_emprunts }}</td>
+                        <td>{{ user.duree_emprunt_max }}</td>
+                        <td>{{ user.Mot_de_passe_user }}</td>
+                        <td class="actions-cell">
+                            <button onclick="openEditModal('{{ user.id_utilisateur }}', '{{ user.nom_utilisateur }}', '{{ user.prenom_utilisateur }}', '{{ user.email_utilisateur }}', '{{ user.categorie }}', '{{ user.limite_emprunts }}', '{{ user.duree_emprunt_max }}')" class="btn-edit">
+                                Modifier
+                            </button>
+                            <form action="{{ url_for('gestionadmin') }}" method="POST" class="inline-form">
+                                <input type="hidden" name="action" value="delete_user">
+                                <input type="hidden" name="id_utilisateur" value="{{ user.id_utilisateur }}">
+                                <button type="submit" class="btn-delete" 
+                                        onclick="return confirm('Confirmer la suppression ?')">
+                                    Supprimer
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+<!-- ajouter utilisateur -->
+
+
+<a href="#modal-user" class="btn-open-modal">Ajouter un Utilisateur</a>
+
+    <!-- Modale d'ajout d'utilisateur cachée par défaut -->
+<div id="modal-user" class="modal">
+    <div class="modal-dialog">
+        <h4 class="modal-title">Ajouter un Utilisateur</h4>
+        <form action="{{ url_for('gestionadmin') }}" method="POST" class="inline-form">
+            <label>Nom</label>
+            <input type="text" name="nom_utilisateur" required class="form-input">
+            <label>Prénom</label>
+            <input type="text" name="prenom_utilisateur" required class="form-input">
+            <label>Email</label>
+            <input type="email" name="email_utilisateur" required class="form-input">
+            <label>Catégorie</label>
+            <select name="categorie" required class="form-input" onchange="updateLimits()">   <!--onchange c'est pour changer les limites selon la catégorie-->
+                <option value="">Sélectionnez une catégorie</option>
+                <option value="abonne">abonné</option>
+                <option value="occasionnel">occasionnel</option>
+                <option value="abonné privilégié">abonné privilégié</option>
+            </select>
+            <label>limite_emprunts</label>
+            <input type="number" name="limite_emprunts" required class="form-input">
+            <label>duree emprunt maximum en jours</label>
+            <input type="number" name="duree_emprunt_max" required class="form-input">
+            <label>Mot de passe</label>
+            <input type="text" name="Mot_de_passe_user" required class="form-input">
+            <div class="button-group">
+                <button type="submit" name="action" value="add_user" class="btn-add">Ajouter un utilisateur</button>
+                <a href="{{ url_for('gestionadmin') }}" class="btn-cancel">Fermer</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+    <!--fonction pour changer les limites selon la catégorie  date demprunt par défault en Javascript -->
+
+<script>
+    function updateLimits() {  
+        const categorie = document.querySelector('select[name="categorie"]').value;
+        const limiteInput = document.querySelector('input[name="limite_emprunts"]');
+        const dureeInput = document.querySelector('input[name="duree_emprunt_max"]');
+        
+        switch(categorie) {
+            case 'occasionnel':
+                limiteInput.value = 1;
+                dureeInput.value = 15;
+                break;
+            case 'abonne':
+                limiteInput.value = 4;
+                dureeInput.value = 30;
+                break;
+            case 'abonné privilégié':
+                limiteInput.value = 8;
+                dureeInput.value = 30;
+                break;
+        }
+    }
+</script>
+<script>
+    function closeModal(modalId) {
+        window.location.hash = ''; // Close the modal by clearing the hash
+    }
+</script>
+
+</body>
+</html>
+
+
+
+
+
+<!-- Modifier Utilisateur -->
+
+
+<div id="modal-edit-user" class="modal">
+    <div class="modal-dialog">
+        <h4 class="modal-title">Modifier l'Utilisateur</h4>
+        <form action="{{ url_for('gestionadmin') }}" method="POST" class="inline-form">
+            <input type="hidden" name="id_utilisateur" id="edit_id_utilisateur">
+            
+            <label>Nom</label>
+            <input type="text" name="nom_utilisateur" id="edit_nom" required class="form-input">
+            
+            <label>Prénom</label>
+            <input type="text" name="prenom_utilisateur" id="edit_prenom" required class="form-input">
+            
+            <label>Email</label>
+            <input type="email" name="email_utilisateur" id="edit_email" required class="form-input">
+            
+            <label>Catégorie</label>
+            <select name="categorie" id="edit_categorie" required class="form-input" onchange="updateEditLimits()">
+                <option value="">Sélectionnez une catégorie</option>
+                <option value="occasionnel">occasionnel</option>
+                <option value="abonne">abonné</option>
+                <option value="abonné privilégié">abonné privilégié</option>
+            </select>
+            
+            <label>limite_emprunts</label>
+            <input type="number" name="limite_emprunts" id="edit_limite_emprunts" required class="form-input">
+            
+            <label>duree emprunt maximum en jours</label>
+            <input type="number" name="duree_emprunt_max" id="edit_duree_emprunt_max" required class="form-input">
+            
+            <label>Mot de passe</label>
+            <input type="text" name="Mot_de_passe_user" id="edit_Mot_de_passe_user" required class="form-input"> 
+
+            <div class="button-group">
+                <button type="submit" name="action" value="edit_user" class="btn-add">Modifier</button>
+                <a href="#" class="btn-cancel" onclick="closeEditModal()">Fermer</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openEditModal(id, nom, prenom, email, categorie, limite, duree,mdp) {
+    document.getElementById('edit_id_utilisateur').value = id;
+    document.getElementById('edit_nom').value = nom;
+    document.getElementById('edit_prenom').value = prenom;
+    document.getElementById('edit_email').value = email;
+    document.getElementById('edit_categorie').value = categorie;
+    document.getElementById('edit_limite_emprunts').value = limite;
+    document.getElementById('edit_duree_emprunt_max').value = duree;
+    document.getElementById('edit_Mot_de_passe_user').value = mdp;
+    
+    window.location.hash = 'modal-edit-user';
+}
+
+function closeEditModal() {
+    window.location.hash = '';
+}
+
+function updateEditLimits() {
+    const categorie = document.getElementById('edit_categorie').value;
+    const limiteInput = document.getElementById('edit_limite_emprunts');
+    const dureeInput = document.getElementById('edit_duree_emprunt_max');
+    
+    switch(categorie) {
+        case 'occasionnel':
+            limiteInput.value = 1;
+            dureeInput.value = 15;
+            break;
+        case 'abonne':
+            limiteInput.value = 4;
+            dureeInput.value = 30;
+            break;
+        case 'abonné privilégié':
+            limiteInput.value = 8;
+            dureeInput.value = 30;
+            break;
+    }
+}
+</script>
+{% endblock %}
