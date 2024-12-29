@@ -1,14 +1,24 @@
+<!-- base.html -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <title>Bibliothèque - {% block title %}{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
 </head>
 <body>
     <nav>
         <ul>
-            <li><a href="{{ url_for('index') }}">Accueil</a></li>
+            
+            {% if session.get('admin') %}
+                <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li><a href="{{ url_for('manage_documents') }}">Documents</a></li>
+                <li><a href="{{ url_for('manage_users') }}">Utilisateurs</a></li>
+                <li><a href="{{ url_for('manage_emprunts') }}">Emprunts</a></li>
+                <li><a href="{{ url_for('logout') }}">Déconnexion</a></li>
+           
+            {% endif %}
         </ul>
     </nav>
     

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Emprunts</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Gestion des Emprunts</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <div class="section">
+            <h2>Nouvel Emprunt</h2>
+            <form method="POST" class="form-grid">
+                <input type="hidden" name="action" value="create">
+                
+                <div class="form-group">
+                    <label for="id_utilisateur">Utilisateur:</label>
+                    <select name="id_utilisateur" required>
+                        <option value="">Sélectionner un utilisateur</option>
+                        {% for id, nom in utilisateurs %}
+                            <option value="{{ id }}">{{ nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_exemplaire">Exemplaire:</label>
+                    <select name="id_exemplaire" required>
+                        <option value="">Sélectionner un exemplaire</option>
+                        {% for id, titre, numero in exemplaires %}
+                            <option value="{{ id }}">{{ titre }} ({{ numero }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="duree">Durée (jours):</label>
+                    <input type="number" name="duree" value="30" min="1" max="60">
+                </div>
+                
+                <button type="submit" class="btn-primary">Créer l'emprunt</button>
+            </form>
+        </div>
+        
+        <div class="section">
+            <h2>Liste des Emprunts</h2>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Utilisateur</th>
+                            <th>Document</th>
+                            <th>N° Exemplaire</th>
+                            <th>Date début</th>
+                            <th>Date fin</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for emprunt in emprunts %}
+                        <tr>
+                            <td>{{ emprunt[0] }}</td>
+                            <td>{{ emprunt[1] }}</td>
+                            <td>{{ emprunt[2] }}</td>
+                            <td>{{ emprunt[6] }}</td>
+                            <td>{{ emprunt[3].strftime('%d/%m/%Y') }}</td>
+                            <td>{{ emprunt[4].strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <span class="status-badge {{ emprunt[5] }}">
+                                    {{ emprunt[5] }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if emprunt[5] == 'en cours' %}
+                                <form method="POST" class="inline-form">
+                                    <input type="hidden" name="action" value="extend">
+                                    <input type="hidden" name="id_emprunt" value="{{ emprunt[0] }}">
+                                    <input type="hidden" name="extension_days" value="15">
+                                    <button type="submit" class="btn-secondary">Prolonger</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

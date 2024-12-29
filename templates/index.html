@@ -1,25 +1,15 @@
+<!-- index.html -->
 {% extends "base.html" %}
-
-{# Définition du titre de la page #}
 {% block title %}Accueil - Gestion Bibliothèque{% endblock %}
 
-{# Block pour les styles CSS #}
-{% block head %}
-
-{% endblock %}
-
-{# Contenu principal de la page #}
 {% block content %}
 <div class="login-container">
     <div class="login-card">
-        {# En-tête avec icône et titres #}
         <div class="login-header">
             <div class="library-icon">📚</div>
             <h1 class="login-title">Bibliothèque Admin</h1>
             <p class="login-subtitle">Connectez-vous pour gérer votre bibliothèque</p>
         </div>
-
-        {# Formulaire de connexion #}
         <form method="POST" action="{{ url_for('index') }}">
             <div class="form-group">
                 <label class="form-label" for="email">Email administrateur</label>
@@ -32,7 +22,6 @@
                     required
                 >
             </div>
-
             <div class="form-group">
                 <label class="form-label" for="password">Mot de passe</label>
                 <input 
@@ -44,13 +33,10 @@
                     required
                 >
             </div>
-
             <button type="submit" class="login-button">
                 Se connecter
             </button>
         </form>
-
-        {# Affichage des messages d'erreur #}
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}

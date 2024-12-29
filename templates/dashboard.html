@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block head %}
+<!-- Ajout de Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .stats-card {
+        @apply bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300;
+    }
+    
+    .stats-value {
+        @apply text-2xl font-bold text-blue-600;
+    }
+    
+    .stats-label {
+        @apply text-sm text-gray-600;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+        margin: 20px 0;
+    }
+    
+    .warning {
+        @apply text-red-600 font-semibold;
+    }
+    
+    .grid-dashboard {
+        @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6;
+    }
+    
+    .card-header {
+        @apply flex items-center justify-between mb-4;
+    }
+    
+    .card-title {
+        @apply text-xl font-semibold text-gray-800;
+    }
+    
+    .stats-trend-up {
+        @apply text-green-500;
+    }
+    
+    .stats-trend-down {
+        @apply text-red-500;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-8 text-gray-800">Tableau de bord administrateur</h1>
+    
+    <!-- Cartes des statistiques principales -->
+    <div class="grid-dashboard mb-8">
+        <!-- Statistiques documents -->
+        <div class="stats-card">
+            <div class="card-header">
+                <h2 class="card-title">Documents</h2>
+                <span class="stats-trend-up">↑ 12%</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="documentsChart"></canvas>
+            </div>
+            <ul class="space-y-2 mt-4">
+                <li>
+                    <span class="stats-label">Total:</span>
+                    <span class="stats-value">{{ doc_stats.total_documents }}</span>
+                </li>
+                <li>
+                    <span class="stats-label">Livres:</span>
+                    <span class="stats-value">{{ doc_stats.total_livres }}</span>
+                </li>
+                <li>
+                    <span class="stats-label">Périodiques:</span>
+                    <span class="stats-value">{{ doc_stats.total_periodiques }}</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Exemplaires avec graphique circulaire -->
+        <div class="stats-card">
+            <div class="card-header">
+                <h2 class="card-title">État des Exemplaires</h2>
+            </div>
+            <div class="chart-container">
+                <canvas id="exemplairesChart"></canvas>
+            </div>
+            <ul class="space-y-2 mt-4">
+                <li>
+                    <span class="stats-label">Total:</span>
+                    <span class="stats-value">{{ exemplaire_stats.total_exemplaires }}</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Emprunts avec graphique linéaire -->
+        <div class="stats-card lg:col-span-2">
+            <div class="card-header">
+                <h2 class="card-title">Évolution des Emprunts</h2>
+            </div>
+            <div class="chart-container">
+                <canvas id="empruntsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top 5 des livres avec graphique en barres -->
+    <div class="stats-card mb-8">
+        <div class="card-header">
+            <h2 class="card-title">Top 5 des livres les plus empruntés</h2>
+        </div>
+        <div class="chart-container">
+            <canvas id="topLivresChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Statistiques des amendes avec graphique -->
+    <div class="stats-card">
+        <div class="card-header">
+            <h2 class="card-title">Amendes</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="chart-container">
+                <canvas id="amendesChart"></canvas>
+            </div>
+            <div>
+                <ul class="space-y-4">
+                    <li>
+                        <span class="stats-label">Total des amendes:</span>
+                        <span class="stats-value">{{ amende_stats.total_amendes }}</span>
+                    </li>
+                    <li>
+                        <span class="stats-label">Montant total:</span>
+                        <span class="stats-value">{{ "%.2f"|format(amende_stats.montant_total) }}€</span>
+                    </li>
+                    <li class="warning">
+                        <span class="stats-label">Montant impayé:</span>
+                        <span class="stats-value">{{ "%.2f"|format(amende_stats.montant_impaye) }}€</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Script pour les graphiques -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Configuration des couleurs
+    const colors = {
+        primary: '#3b82f6',
+        secondary: '#60a5fa',
+        danger: '#ef4444',
+        success: '#10b981',
+        warning: '#f59e0b'
+    };
+
+    // Graphique Documents (Donut)
+    new Chart(document.getElementById('documentsChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Livres', 'Périodiques'],
+            datasets: [{
+                data: [{{ doc_stats.total_livres }}, {{ doc_stats.total_periodiques }}],
+                backgroundColor: [colors.primary, colors.secondary]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Graphique Exemplaires (Pie)
+    new Chart(document.getElementById('exemplairesChart'), {
+        type: 'pie',
+        data: {
+            labels: ['En prêt', 'Disponibles', 'Endommagés'],
+            datasets: [{
+                data: [
+                    {{ exemplaire_stats.exemplaires_pretes }},
+                    {{ exemplaire_stats.exemplaires_disponibles }},
+                    {{ exemplaire_stats.exemplaires_endommages }}
+                ],
+                backgroundColor: [colors.warning, colors.success, colors.danger]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Graphique Emprunts (Line)
+    // Note: Ces données devraient venir de votre backend
+    const empruntsData = {
+        labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
+        datasets: [{
+            label: 'Nombre d\'emprunts',
+            data: [65, 59, 80, 81, 56, 55],
+            borderColor: colors.primary,
+            fill: false
+        }]
+    };
+
+    new Chart(document.getElementById('empruntsChart'), {
+        type: 'line',
+        data: empruntsData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Graphique Top Livres (Bar)
+    new Chart(document.getElementById('topLivresChart'), {
+        type: 'bar',
+        data: {
+            labels: [{% for livre in top_livres %}'{{ livre.titre }}',{% endfor %}],
+            datasets: [{
+                label: 'Nombre d\'emprunts',
+                data: [{% for livre in top_livres %}{{ livre.nombre_emprunts }},{% endfor %}],
+                backgroundColor: colors.primary
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Graphique Amendes (Bar)
+    new Chart(document.getElementById('amendesChart'), {
+        type: 'bar',
+        data: {
+            labels: ['Payées', 'Impayées'],
+            datasets: [{
+                label: 'Montant (€)',
+                data: [
+                    {{ amende_stats.montant_total - amende_stats.montant_impaye }},
+                    {{ amende_stats.montant_impaye }}
+                ],
+                backgroundColor: [colors.success, colors.danger]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
