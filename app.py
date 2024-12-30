@@ -3,6 +3,12 @@ import pymysql
 import os
 from datetime import datetime, timedelta 
 from werkzeug.security import check_password_hash
+import smtplib
+from email.mime.text import MIMEText
+from functools import wraps
+import json
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -23,6 +29,9 @@ def get_db_connection():
         database=db_config['database'],
         cursorclass=pymysql.cursors.DictCursor
     )
+
+def get_db():
+    return get_db_connection()
 
 def is_admin():
     return 'admin' in session and session['admin'] == True
@@ -388,126 +397,198 @@ def manage_users():
     return render_template('users.html', users=users)
 @app.route('/emprunts', methods=['GET', 'POST'])
 def manage_emprunts():
-    cur = pymysql.connect(
-        host=db_config['host'],
-        user=db_config['user'],
-        password=db_config['password'],
-        database=db_config['database'],
-        cursorclass=pymysql.cursors.DictCursor
-    ).cursor()
-    
-
-
-
-
     if request.method == 'POST':
         action = request.form.get('action')
         
-        if action == 'create':
-            # Récupération des données du formulaire
-            id_exemplaire = request.form.get('id_exemplaire')
-            id_utilisateur = request.form.get('id_utilisateur')
-            duree = int(request.form.get('duree', 30))  # durée par défaut : 30 jours
+        if action == 'new_emprunt':
+            utilisateur_id = request.form.get('utilisateur_id')
+            exemplaire_id = request.form.get('exemplaire_id')
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
             
             try:
-                # Vérifier si l'exemplaire est disponible
-                cur.execute("""
-                    SELECT statut_exemplaire 
+                # Vérifier la catégorie de l'utilisateur et ses limites
+                cursor.execute("""
+                    SELECT categorie, limite_emprunts, duree_emprunt_max 
+                    FROM utilisateur 
+                    WHERE id_utilisateur = %s
+                """, (utilisateur_id,))
+                user_info = cursor.fetchone()
+                
+                if not user_info:
+                    flash("Utilisateur non trouvé", 'error')
+                    return redirect(url_for('manage_emprunts'))
+                
+                categorie, limite_emprunts, duree_emprunt = user_info
+                
+                # Vérifier le nombre d'emprunts en cours
+                cursor.execute("""
+                    SELECT COUNT(*) FROM emprunt 
+                    WHERE id_utilisateur = %s 
+                    AND statut_emprunt IN ('en cours', 'en retard')
+                """, (utilisateur_id,))
+                nb_emprunts = cursor.fetchone()[0]
+                
+                if nb_emprunts >= limite_emprunts:
+                    flash(f"Limite d'emprunts atteinte ({limite_emprunts})", 'error')
+                    return redirect(url_for('manage_emprunts'))
+                
+                # Vérifier les amendes impayées
+                cursor.execute("""
+                    SELECT COUNT(*) FROM amende 
+                    WHERE id_utilisateur = %s 
+                    AND statut_paiement = 'en attente'
+                """, (utilisateur_id,))
+                amendes_impayees = cursor.fetchone()[0]
+                
+                if amendes_impayees > 0:
+                    flash("Des amendes sont en attente de paiement", 'error')
+                    return redirect(url_for('manage_emprunts'))
+                
+                # Vérifier la disponibilité de l'exemplaire
+                cursor.execute("""
+                    SELECT statut_exemplaire, id_document 
                     FROM exemplaire 
                     WHERE id_exemplaire = %s
-                """, [id_exemplaire])
-                exemplaire = cur.fetchone()
+                """, (exemplaire_id,))
+                exemplaire_info = cursor.fetchone()
                 
-                if exemplaire and exemplaire[0] == 'en rayon':
-                    # Calculer la date de fin
-                    date_fin = datetime.now() + timedelta(days=duree)
-                    
-                    # Créer l'emprunt
-                    cur.execute("""
-                        INSERT INTO emprunt 
-                        (id_exemplaire, id_utilisateur, date_debut, date_fin) 
-                        VALUES (%s, %s, NOW(), %s)
-                    """, (id_exemplaire, id_utilisateur, date_fin))
-                    
-                    # Mettre à jour le statut de l'exemplaire
-                    cur.execute("""
-                        UPDATE exemplaire 
-                        SET statut_exemplaire = 'en prêt' 
-                        WHERE id_exemplaire = %s
-                    """, [id_exemplaire])
-                    
-                    pymysql.connection.commit()
-                    flash('Emprunt créé avec succès!', 'success')
-                else:
-                    flash('Exemplaire non disponible', 'error')
-                    
+                if exemplaire_info[0] != 'en rayon':
+                    flash("L'exemplaire n'est pas disponible", 'error')
+                    return redirect(url_for('manage_emprunts'))
+                
+                # Créer l'emprunt
+                date_debut = datetime.now()
+                date_fin = date_debut + timedelta(days=duree_emprunt)
+                
+                cursor.execute("""
+                    INSERT INTO emprunt (id_exemplaire, id_utilisateur, 
+                    date_debut, date_fin, statut_emprunt) 
+                    VALUES (%s, %s, %s, %s, 'en cours')
+                """, (exemplaire_id, utilisateur_id, date_debut, date_fin))
+                
+                # Mettre à jour le statut de l'exemplaire
+                cursor.execute("""
+                    UPDATE exemplaire 
+                    SET statut_exemplaire = 'en prêt' 
+                    WHERE id_exemplaire = %s
+                """, (exemplaire_id,))
+                
+                # Créer une notification
+                cursor.execute("""
+                    INSERT INTO notification (id_utilisateur, titre_notification, message) 
+                    VALUES (%s, 'Nouvel emprunt', 'Votre emprunt a été enregistré avec succès.')
+                """, (utilisateur_id,))
+                
+                conn.commit()
+                flash('Emprunt enregistré avec succès', 'success')
+                
             except Exception as e:
-                flash(f'Erreur lors de la création de l\'emprunt: {str(e)}', 'error')
+                conn.rollback()
+                flash(f'Erreur lors de l\'enregistrement: {str(e)}', 'error')
+            finally:
+                cursor.close()
+                conn.close()
                 
-        elif action == 'extend':
-            # Prolongation d'un emprunt
-            id_emprunt = request.form.get('id_emprunt')
-            extension_days = int(request.form.get('extension_days', 15))
+        elif action == 'return_book':
+            emprunt_id = request.form.get('emprunt_id')
+            nouvel_etat = request.form.get('etat')
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
             
             try:
-                # Vérifier si l'emprunt existe et n'est pas en retard
-                cur.execute("""
-                    SELECT date_fin, statut_emprunt 
-                    FROM emprunt 
-                    WHERE id_emprunt = %s
-                """, [id_emprunt])
-                emprunt = cur.fetchone()
+                # Récupérer les informations de l'emprunt
+                cursor.execute("""
+                    SELECT e.id_exemplaire, e.id_utilisateur, e.date_fin,
+                           ex.etat as ancien_etat
+                    FROM emprunt e
+                    JOIN exemplaire ex ON e.id_exemplaire = ex.id_exemplaire
+                    WHERE e.id_emprunt = %s
+                """, (emprunt_id,))
+                emprunt_info = cursor.fetchone()
                 
-                if emprunt and emprunt[1] != 'en retard':
-                    nouvelle_date_fin = emprunt[0] + timedelta(days=extension_days)
+                exemplaire_id, utilisateur_id, date_fin, ancien_etat = emprunt_info
+                
+                # Vérifier si retard
+                if datetime.now() > date_fin:
+                    # Calculer le montant de l'amende (exemple: 1€ par jour)
+                    jours_retard = (datetime.now() - date_fin).days
+                    montant_amende = jours_retard * 1.0
                     
-                    cur.execute("""
-                        UPDATE emprunt 
-                        SET date_fin = %s 
-                        WHERE id_emprunt = %s
-                    """, (nouvelle_date_fin, id_emprunt))
-                    
-                    pymysql.connection.commit()
-                    flash('Emprunt prolongé avec succès!', 'success')
-                else:
-                    flash('Impossible de prolonger cet emprunt', 'error')
-                    
+                    cursor.execute("""
+                        INSERT INTO amende (id_emprunt, id_utilisateur, 
+                        montant, raison) 
+                        VALUES (%s, %s, %s, 'retard')
+                    """, (emprunt_id, utilisateur_id, montant_amende))
+                
+                # Vérifier si détérioration
+                if nouvel_etat != ancien_etat and nouvel_etat in ['usagé', 'endommagé']:
+                    cursor.execute("""
+                        INSERT INTO amende (id_emprunt, id_utilisateur, 
+                        montant, raison) 
+                        VALUES (%s, %s, 50.0, 'détérioration')
+                    """, (emprunt_id, utilisateur_id))
+                
+                # Mettre à jour l'emprunt
+                cursor.execute("""
+                    UPDATE emprunt 
+                    SET statut_emprunt = 'terminé',
+                        date_retour_effectif = NOW()
+                    WHERE id_emprunt = %s
+                """, (emprunt_id,))
+                
+                # Mettre à jour l'exemplaire
+                cursor.execute("""
+                    UPDATE exemplaire 
+                    SET statut_exemplaire = 'en rayon',
+                        etat = %s
+                    WHERE id_exemplaire = %s
+                """, (nouvel_etat, exemplaire_id))
+                
+                conn.commit()
+                flash('Retour enregistré avec succès', 'success')
+                
             except Exception as e:
-                flash(f'Erreur lors de la prolongation: {str(e)}', 'error')
+                conn.rollback()
+                flash(f'Erreur lors du retour: {str(e)}', 'error')
+            finally:
+                cursor.close()
+                conn.close()
     
-    # Récupérer la liste des emprunts pour affichage
-    cur.execute("""
-        SELECT e.id_emprunt, u.nom_utilisateur, d.titre, 
-               e.date_debut, e.date_fin, e.statut_emprunt,
-               ex.numero_ordre
+    # Récupérer les données pour l'affichage
+    conn = get_db_connection()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    
+    # Récupérer tous les emprunts avec les informations associées
+    cursor.execute("""
+        SELECT e.*, u.nom_utilisateur, u.prenom_utilisateur,
+               d.titre, ex.numero_ordre, ex.etat
         FROM emprunt e
         JOIN utilisateur u ON e.id_utilisateur = u.id_utilisateur
         JOIN exemplaire ex ON e.id_exemplaire = ex.id_exemplaire
         JOIN document d ON ex.id_document = d.id_document
         ORDER BY e.date_debut DESC
     """)
+    emprunts = cursor.fetchall()
     
-    
-    emprunts = cur.fetchall()
-    
-    
-    # Récupérer la liste des utilisateurs pour le formulaire
-    cur.execute("SELECT id_utilisateur, nom_utilisateur FROM utilisateur")
-    utilisateurs = cur.fetchall()
-    
-    # Récupérer la liste des exemplaires disponibles
-    cur.execute("""
-        SELECT ex.id_exemplaire, d.titre, ex.numero_ordre 
+    # Récupérer les exemplaires disponibles
+    cursor.execute("""
+        SELECT ex.*, d.titre
         FROM exemplaire ex
         JOIN document d ON ex.id_document = d.id_document
         WHERE ex.statut_exemplaire = 'en rayon'
     """)
-    exemplaires = cur.fetchall()
+    exemplaires_dispo = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
     
     return render_template('emprunts.html', 
                          emprunts=emprunts,
-                         utilisateurs=utilisateurs,
-                         exemplaires=exemplaires)
+                         exemplaires_dispo=exemplaires_dispo)
+@app.route('/logout')
 
 @app.route('/logout')
 def logout():
